@@ -1,0 +1,24 @@
+[
+  {
+    "name": "My Strategy",
+    "conditions": [
+      {
+        "indicator": "RSI_14",
+        "operator": "<",
+        "value": "30"
+      }
+    ],
+    "action": "BUY"
+  },
+  {
+    "name": "Test",
+    "conditions": [
+      {
+        "indicator": "RSI_14",
+        "operator": "<",
+        "value": "30"
+      }
+    ],
+    "action": "BUY"
+  }
+]
