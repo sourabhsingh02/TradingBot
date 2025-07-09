@@ -20,5 +20,16 @@
       }
     ],
     "action": "BUY"
+  },
+  {
+    "name": "string",
+    "conditions": [
+      {
+        "indicator": "string",
+        "operator": "string",
+        "value": "string"
+      }
+    ],
+    "action": "string"
   }
 ]
