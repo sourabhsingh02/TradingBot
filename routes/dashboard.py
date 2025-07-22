@@ -1,22 +1,43 @@
 from fastapi import APIRouter, Query
-from LiveDataFetch.nseData import get_nse_paginated
-from LiveDataFetch.forexData import get_forex_paginated
+from data.dashboard_util import (get_top_gainers, get_top_losers,
+                                 get_most_volatile ,get_top_movers ,
+                                 )
 
-router = APIRouter()
+from fastapi.responses import JSONResponse
 
-@router.get("/dashboard")
-def get_combined_dashboard(
-    nse_page: int = 1,
-    forex_page: int = 1,
-    size: int = 10,
-    nse_filter: str = Query("all", enum=["all", "gainers", "losers", "volatile"]),
-    forex_filter: str = Query("all", enum=["all", "gainers", "losers", "volatile"])
-):
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-    nse_data = get_nse_paginated(page=nse_page, size=size, market="nse", filter_type=nse_filter)
-    forex_data = get_forex_paginated(page=forex_page, size=size, market="forex", filter_type=forex_filter)
+@router.get("/top-gainers")
+def top_gainers(page : int = Query(1,gt = 0),limit :int = Query(10,gt=0)):
+    return {"top_gainers": get_top_gainers(page , limit)}
 
-    return {
-        "nse": nse_data,
-        "forex": forex_data
-    }
+@router.get("/top-losers")
+def top_losers(page : int = Query(1,gt = 0),limit :int = Query(10,gt=0)):
+    return {"top_losers": get_top_losers(page , limit)}
+
+@router.get("/top-volatile")
+def top_volatile(page : int = Query(1,gt = 0),limit :int = Query(10,gt=0)):
+    return {"top_volatile": get_most_volatile(page , limit)}
+
+@router.get("/top-movers")
+def top_moviers(page : int = Query(1,gt = 0),limit :int = Query(10,gt=0)):
+    return {"top_movers":get_top_movers(page , limit)}
+
+
+
+# @router.get("/most-bought-pairs")
+# def most_bought_pairs(page: int = Query(1, ge=1), per_page: int = Query(10, le=50)):
+#     try:
+#         data = get_most_bought_pairs(page, per_page)
+#         return {"status": "success", "results": data}
+#     except Exception as e:
+#         return {"status": "error", "message": str(e)}
+#
+#
+# @router.get("/most-sold-pairs")
+# def most_sold_pairs(page: int = Query(1, ge=1), per_page: int = Query(10, le=50)):
+#     try:
+#         data = get_most_sold_pairs(page, per_page)
+#         return {"status": "success", "results": data}
+#     except Exception as e:
+#         return {"status": "error", "message": str(e)

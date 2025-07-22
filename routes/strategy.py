@@ -1,199 +1,73 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import List
-from Strategies.models import (CustomSignalRequest, PredefinedSignalRequest, Strategy, )
+from fastapi import APIRouter, HTTPException , Form
+from pydantic import BaseModel
+from typing import Optional, List
+from uuid import uuid4
+from Strategies.strategy_utils import resolve_strategies, monitor_and_trade, place_manual_order
 from Strategies.predefined_strategies import PREDEFINED_STRATEGIES
-from Strategies.strategy_utils import (resolve_strategy, apply_strategy, apply_live_strategy,apply_multiple_strategies )
-from Strategies.saved_strategies import (load_saved_strategies, save_strategy, delete_strategy, search_saved_strategies, )
-from PastDataFetch.data_fetcher import fetch_ohlcv
-from LiveDataFetch.LiveData import fetch_live_candles
-import pandas as pd
+from Strategies.models import Strategy,StrategyCondition,StrategyPayload,StrategyRequest,CUSTOM_STRATEGIES,ManualOrderRequest,Condition
 
-router = APIRouter(prefix="/api/strategy", tags=["Strategies"])
+router = APIRouter(prefix="/strategy", tags=["Strategy"])
 
 
-@router.post("/apply/predefined")
-def apply_predefined(req: PredefinedSignalRequest,
-                     mode: str = Query("past", enum=["past", "live"])):
-    if not (req.strategy_name or req.strategy_names):
-        raise HTTPException(status_code=400, detail="Provide strategy_name(s)")
 
-    names = [req.strategy_name] if req.strategy_name else req.strategy_names
-    strategies = []
-    for n in names:
-        strat = next((s for s in PREDEFINED_STRATEGIES if s["name"] == n), None)
-        if not strat:
-            raise HTTPException(status_code=404, detail=f"Strategy '{n}' not found")
-        strategies.append(strat)
-
-    df = _get_df(req.symbol, req.market, mode)
-    if len(strategies) == 1:
-        return apply_multiple_strategies(df, strategies)[0]  # return single dict
-    return {
-        "symbol": req.symbol,
-        "market": req.market,
-        "mode": mode,
-        "results": apply_multiple_strategies(df, strategies)
-    }
+@router.post("/apply_predefined")
+def apply_predefined_strategy(req: StrategyRequest):
+    strategies = resolve_strategies(req.strategy_name)
+    for strategy in strategies:
+        monitor_and_trade(req.symbol, strategy, req.market, req.interval, auto_trade=req.auto_trade)
+    return {"status": "watching", "strategies": [s["name"] for s in strategies]}
 
 
-@router.get("/predefined/list", response_model=List[str])
+@router.post("/apply_custom")
+def apply_custom_strategy(req: StrategyRequest):
+    if not req.strategy:
+        raise HTTPException(status_code=400, detail="Strategy payload required")
+    strategies = req.strategy if isinstance(req.strategy, list) else [req.strategy]
+    for strategy in strategies:
+        monitor_and_trade(req.symbol, strategy.dict(), req.market, req.interval, auto_trade=req.auto_trade)
+    return {"status": "watching", "strategy": req.strategy.name}
+
+
+@router.get("/predefined_List")
 def list_predefined():
-    return [s["name"] for s in PREDEFINED_STRATEGIES]
+    return PREDEFINED_STRATEGIES
+
+
+@router.get("/custom_List")
+def list_custom():
+    return CUSTOM_STRATEGIES
 
 
 
-@router.get("/predefined/search")
-def search_predefined(query: str = Query(...)):
-    results = [s for s in PREDEFINED_STRATEGIES if query.lower() in s["name"].lower()]
-    return {"results": results}
+@router.post("/custom_create")
+def create_custom_strategy(payload: StrategyPayload):
+    payload.id = str(uuid4())
+    CUSTOM_STRATEGIES.append(payload.dict())
+    return {"status": "created", "id": payload.id}
 
 
-@router.post("/apply/custom")
-def apply_custom(req: CustomSignalRequest,
-                 mode: str = Query("past", enum=["past", "live"])):
-
-    if req.strategy is None:
-        raise HTTPException(status_code=400, detail="strategy missing")
-
-    # accept list or single
-    strategies: List[Strategy] = req.strategy if isinstance(req.strategy, list) else [req.strategy]
-
-
-    for s in strategies:
-        try:
-            save_strategy(s.dict())
-        except ValueError:
-            pass  # already exists -> ignore
-
-    df = _get_df(req.symbol, req.market, mode)
-    if len(strategies) == 1:
-        return apply_multiple_strategies(df, [s.dict() for s in strategies])[0]
-    return {
-        "symbol": req.symbol,
-        "market": req.market,
-        "mode": mode,
-        "results": apply_multiple_strategies(df, [s.dict() for s in strategies])
-    }
+@router.delete("/custom_delete/{strategy_id}")
+def delete_custom(strategy_id: str):
+    global CUSTOM_STRATEGIES
+    CUSTOM_STRATEGIES = [s for s in CUSTOM_STRATEGIES if s['id'] != strategy_id]
+    return {"status": "deleted"}
 
 
 
-@router.get("/custom/list")
-def list_saved():
-    return {"strategies": load_saved_strategies()}
-
-
-@router.delete("/custom/{name}")
-def remove_saved(name: str):
-    try:
-        delete_strategy(name)
-        return {"message": f"Strategy '{name}' deleted"}
-    except ValueError as err:
-        raise HTTPException(status_code=404, detail=str(err))
-
-
-
-@router.get("/custom/search")
-def search_saved(query: str = Query(...)):
-    return {"results": search_saved_strategies(query)}
-
-
-@router.put("/custom/{name}")
-def update_saved(name: str, strategy: Strategy):
-    strategies = load_saved_strategies()
-    idx = next((i for i, s in enumerate(strategies) if s["name"] == name), None)
-    if idx is None:
-        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-
-
-    if strategy.name != name and any(s["name"] == strategy.name for s in strategies):
-        raise HTTPException(status_code=400, detail="New name already exists")
-
-    strategies[idx] = strategy.dict()
-
-    from Strategies.saved_strategies import _write_file  # type: ignore
-
-    _write_file(strategies)
-    return {"message": f"Strategy '{name}' updated"}
-
-
-
-
-
-def _get_df(symbol, market, mode):
-    raw = fetch_live_candles(symbol, market) if mode == "live" else fetch_ohlcv(symbol, market)
-    if not raw:
-        raise HTTPException(status_code=404, detail="No data")
-    return pd.DataFrame(raw)
-
-
-
-
-
-
-
-
-
-
-
-
-# from fastapi import APIRouter, HTTPException
-# from predefined_strategies import PREDEFINED_STRATEGIES
-# from strategy_utils import apply_strategy
-# from saved_strategies import save_strategy, load_saved_strategies
-# from strategy_utils import resolve_strategy
-# from models import Condition, Strategy, CustomSignalRequest, PredefinedSignalRequest
-# from saved_strategies import delete_strategy ,search_saved_strategies
-#
-# router = APIRouter(prefix="/api/strategy", tags=["Strategies"])
-#
-# @router.post("/custom-signal")
-# def get_custom_signal(payload: CustomSignalRequest):
-#     strategy = resolve_strategy(payload)
-#     return apply_strategy(payload.symbol, strategy)
-#
-# @router.post("/save")
-# def save_custom_strategy(strategy: Strategy):
+# @router.post("/manual")  json dene k liye
+# def manual_trade(req: ManualOrderRequest):
 #     try:
-#         save_strategy(strategy.dict())
-#         return {"message": "Strategy saved successfully"}
-#     except ValueError as err:
-#         raise HTTPException(status_code=400, detail=str(err))
-#
-# @router.get("/savedList")
-# def get_saved_strategies():
-#     return {"strategies": load_saved_strategies()}
-#
-#
-# @router.get("/search/saved")
-# def search_saved(name: str):
-#     result = search_saved_strategies(name)
-#     return {"results": result}
-#
-#
-#
-# @router.post("/predefined-signal")
-# def get_predefined_signal(payload: PredefinedSignalRequest):
-#     strategy = next((s for s in PREDEFINED_STRATEGIES if s["name"] == payload.strategy_name), None)
-#     if not strategy:
-#         raise HTTPException(status_code=404, detail="Strategy not found")
-#     return apply_strategy(payload.symbol, strategy)
-#
-#
-# @router.get("/PredefinedList")
-# def list_strategies():
-#     return {"strategies": [s["name"] for s in PREDEFINED_STRATEGIES]}
-#
-#
-# @router.get("/search/predefined")
-# def search_predefined(name: str):
-#     results = [s for s in PREDEFINED_STRATEGIES if name.lower() in s["name"].lower()]
-#     return {"results": results}
-#
-#
-# @router.delete("/delete/{name}")
-# def delete_saved_strategy(name: str):
-#     try:
-#         delete_strategy(name)
-#         return {"message": f"Strategy '{name}' deleted successfully"}
-#     except ValueError as err:
-#         raise HTTPException(status_code=404, detail=str(err))
+#         success = manual_order(req.symbol, req.action)
+#         return {"status": "success" if success else "failed"}
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
+
+# for direct parameters
+@router.post("/manual")
+def manual_order(
+        symbol : str ,
+        action : str ,
+        investment : float ,
+):
+    return  place_manual_order(symbol , action ,investment)
