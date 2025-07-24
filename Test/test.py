@@ -2,40 +2,77 @@ from fastapi import APIRouter
 from datetime import datetime, timedelta
 import pandas as pd
 import MetaTrader5 as mt5
-
+from App.api_config import MT5_LOGIN, MT5_PASSWORD, MT5_SERVER
 router = APIRouter(prefix="/test", tags=["Most Buy/Sell"])
 
-# ✅ Fetch tick data for a symbol
-def tick_data_for_most_buy_sell(symbol: str, minutes: int = 30):
-    from data.completeData import fetch_mt5_tick_data
+
+def fetch_mt5_tick_data_for_db(symbol: str, start_time=None, end_time=None):
     import pytz
     from datetime import datetime, timedelta
 
-    timezone = pytz.timezone("Etc/UTC")
-    end_time = datetime.now(timezone)
-    start_time = end_time - timedelta(minutes=minutes)
+    if not mt5.initialize(login=MT5_LOGIN(), password=MT5_PASSWORD(), server=MT5_SERVER()):
+        print("MT5 init failed:", mt5.last_error())
+        return pd.DataFrame()
 
-    ticks = fetch_mt5_tick_data(symbol, start_time, end_time)
+    if not mt5.symbol_select(symbol, True):
+        print(f"Symbol select failed: {symbol}")
+        mt5.shutdown()
+        return pd.DataFrame()
 
-    if ticks.empty:
-        print(f"[DEBUG] No tick data returned for {symbol} from {start_time} to {end_time}")
-        return []
+    if start_time is None or end_time is None:
+        end_time = datetime.now(pytz.UTC)
+        start_time = end_time - timedelta(minutes=30)
 
-    print(f"[DEBUG] Total ticks fetched: {len(ticks)}")
+    ticks = mt5.copy_ticks_range(symbol, start_time, end_time, mt5.COPY_TICKS_ALL)
+    mt5.shutdown()
 
-    # Add 'type' column if not present
-    if "type" not in ticks.columns:
-        print(f"[DEBUG] Column 'type' not found in ticks")
-        return []
+    if ticks is None or len(ticks) == 0:
+        print(f"No tick data found for {symbol}")
+        return pd.DataFrame()
 
-    # Actual volume calc
-    buy_volume = ticks[ticks["type"] == 0]["volume"].sum()
-    sell_volume = ticks[ticks["type"] == 1]["volume"].sum()
+    df = pd.DataFrame(ticks)
+    df["timestamp"] = pd.to_datetime(df["time"], unit="s")
+    return df
+
+
+from datetime import datetime, timedelta
+import pandas as pd
+from data.completeData import fetch_mt5_tick_data
+
+from datetime import datetime, timedelta
+import pandas as pd
+from data.completeData import fetch_mt5_tick_data
+
+def tick_data_for_most_buy_sell(symbol: str, minutes: int = 30):
+    ticks = fetch_mt5_tick_data(symbol)
+
+    if not ticks:
+        return {"status": "error", "message": "No tick data or volume unavailable"}
+
+    df = pd.DataFrame(ticks)
+    if df.empty or "epoch" not in df.columns:
+        return {"status": "error", "message": "Tick data invalid or missing 'epoch'"}
+
+    # Filter by time window
+    cutoff_epoch = int((datetime.utcnow() - timedelta(minutes=minutes)).timestamp())
+    df = df[df["epoch"] >= cutoff_epoch]
+
+    if df.empty:
+        return {"status": "error", "message": f"No tick data in last {minutes} minutes"}
+
+    # Improved classification logic
+    df["type"] = df.apply(lambda row: 0 if row["bid"] <= row["ask"] else 1, axis=1)
+
+    buy_volume = df[df["type"] == 0]["volume"].sum()
+    sell_volume = df[df["type"] == 1]["volume"].sum()
 
     return {
-        "symbol": symbol,
-        "buy_volume": buy_volume,
-        "sell_volume": sell_volume,
+        "status": "success",
+        "data": {
+            "symbol": symbol,
+            "buy_volume": float(buy_volume),
+            "sell_volume": float(sell_volume)
+        }
     }
 
 

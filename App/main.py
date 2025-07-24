@@ -8,6 +8,7 @@ from routes.data import router as data_router
 from routes.dashboard import router as dashboard_router
 from Test.test import router as test_router
 from routes.mt5_cred import router as mt5_router
+from routes.user import router as user_router
 app = FastAPI(title="TradingBot API")
 
 @app.get("/")
@@ -15,6 +16,7 @@ def root():
     return {"msg": "hello"}
 
 # attach all /api routes
+app.include_router(user_router)
 app.include_router(data_router)
 app.include_router(backTesting_router)
 app.include_router(symbols_router)

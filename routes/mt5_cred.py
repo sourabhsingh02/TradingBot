@@ -16,7 +16,6 @@ def login_mt5(request: MT5LoginRequest):
     # Set dynamic credentials
     set_user_credentials(request.login, request.password, request.server)
 
-    # Try initializing MT5 with new credentials
     initialized = initialize(
         login=request.login,
         password=request.password,

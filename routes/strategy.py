@@ -62,7 +62,6 @@ def delete_custom(strategy_id: str):
 #     except Exception as e:
 #         raise HTTPException(status_code=400, detail=str(e))
 
-
 # for direct parameters
 @router.post("/manual")
 def manual_order(
