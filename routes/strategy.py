@@ -1,72 +1,115 @@
-from fastapi import APIRouter, HTTPException , Form
+# auto_trade.py
+from fastapi import APIRouter, HTTPException ,Query
+from datetime import datetime
+from typing import List
 from pydantic import BaseModel
-from typing import Optional, List
-from uuid import uuid4
-from Strategies.strategy_utils import resolve_strategies, monitor_and_trade, place_manual_order
+from threading import Thread
+import time
+
+
 from Strategies.predefined_strategies import PREDEFINED_STRATEGIES
-from Strategies.models import Strategy,StrategyCondition,StrategyPayload,StrategyRequest,CUSTOM_STRATEGIES,ManualOrderRequest,Condition
-
-router = APIRouter(prefix="/strategy", tags=["Strategy"])
-
+from Strategies.strategy_utils import auto_trade_worker
+router = APIRouter(prefix= "/autoTrade" , tags=["Auto Trade And Strategies"])
 
 
-@router.post("/apply_predefined")
-def apply_predefined_strategy(req: StrategyRequest):
-    strategies = resolve_strategies(req.strategy_name)
-    for strategy in strategies:
-        monitor_and_trade(req.symbol, strategy, req.market, req.interval, auto_trade=req.auto_trade)
-    return {"status": "watching", "strategies": [s["name"] for s in strategies]}
-
-
-@router.post("/apply_custom")
-def apply_custom_strategy(req: StrategyRequest):
-    if not req.strategy:
-        raise HTTPException(status_code=400, detail="Strategy payload required")
-    strategies = req.strategy if isinstance(req.strategy, list) else [req.strategy]
-    for strategy in strategies:
-        monitor_and_trade(req.symbol, strategy.dict(), req.market, req.interval, auto_trade=req.auto_trade)
-    return {"status": "watching", "strategy": req.strategy.name}
-
-
-@router.get("/predefined_List")
-def list_predefined():
-    return PREDEFINED_STRATEGIES
-
-
-@router.get("/custom_List")
-def list_custom():
-    return CUSTOM_STRATEGIES
+class StrategyApplyRequest(BaseModel):
+    strategy_name: str
+    symbols: List[str]
+    investment: float
+    interval: str  # E.g., "M15", "H1"
 
 
 
-@router.post("/custom_create")
-def create_custom_strategy(payload: StrategyPayload):
-    payload.id = str(uuid4())
-    CUSTOM_STRATEGIES.append(payload.dict())
-    return {"status": "created", "id": payload.id}
+@router.post("/apply-strategy")
+def apply_strategy(request: StrategyApplyRequest):
+    for symbol in request.symbols:
+        existing = next((s for s in applied_strategies if s["symbol"] == symbol and s["strategy_name"] == request.strategy_name), None)
+        if existing:
+            continue  # Already applied
+
+        applied_strategies.append({
+            "strategy_name": request.strategy_name,
+            "symbol": symbol,
+            "investment": request.investment,
+            "interval": request.interval
+        })
+
+        thread = Thread(target=auto_trade_worker, args=(symbol, request.strategy_name, request.investment, request.interval))
+        thread.daemon = True
+        thread.start()
+
+    return {"message": "Strategy applied to all symbols."}
 
 
-@router.delete("/custom_delete/{strategy_id}")
-def delete_custom(strategy_id: str):
-    global CUSTOM_STRATEGIES
-    CUSTOM_STRATEGIES = [s for s in CUSTOM_STRATEGIES if s['id'] != strategy_id]
-    return {"status": "deleted"}
+@router.post("/unapply-strategy")
+def unapply_strategy(request: StrategyApplyRequest):
+    global applied_strategies
+    applied_strategies = [s for s in applied_strategies if not (s["strategy_name"] == request.strategy_name and s["symbol"] in request.symbols)]
+    return {"message": "Strategy unapplied from given symbols."}
 
 
+@router.get("/strategies")
+def get_all_strategies():
+    return {"strategies": PREDEFINED_STRATEGIES}
 
-# @router.post("/manual")  json dene k liye
-# def manual_trade(req: ManualOrderRequest):
+
+@router.get("/applied-strategies")
+def get_applied():
+    return {"applied": applied_strategies}
+
+@router.get("/strategies/search")
+def search_predefined_strategies(query: str = Query(...)):
+    query_lower = query.lower()
+    matched = [
+        strategy["name"]
+        for strategy in PREDEFINED_STRATEGIES
+        if query_lower in strategy["name"].lower()
+    ]
+    return {"matched_strategies":matched}
+
+@router.get("/strategies/names")
+def get_all_strategy_names():
+    names = [strategy["name"] for strategy in PREDEFINED_STRATEGIES]
+    return {"strategy_names":names}
+
+ # +++++++++++++++++    OLD  WORKING FOR ONLY BUY CONDITION
+
+# from fastapi import APIRouter, HTTPException
+# from pydantic import BaseModel
+# from Strategies.predefined_strategies import PREDEFINED_STRATEGIES
+# from Strategies.strategy_utils import apply_predefined_strategy_logic
+# from SymbolsPairs.forexSymbols import fetch_all_forex_symbols
+#
+#
+# router = APIRouter(prefix="/predefined", tags=["Auto Order And Strategies"])
+#
+# class PredefinedApplyRequest(BaseModel):
+#     symbol: str
+#     strategy_name: str
+#     interval: str
+#     investment: float
+#
+# @router.get("/list")
+# def list_predefined_strategies():
+#     return PREDEFINED_STRATEGIES
+#
+# @router.post("/apply")
+# def apply_predefined_strategy(req: PredefinedApplyRequest):
 #     try:
-#         success = manual_order(req.symbol, req.action)
-#         return {"status": "success" if success else "failed"}
+#         valid_symbols = fetch_all_forex_symbols()
+#         if req.symbol not in valid_symbols:
+#             raise HTTPException(status_code=400, detail="Invalid or unsupported symbol")
+#
+#         results = apply_predefined_strategy_logic(
+#             symbol=req.symbol,
+#             strategy_name=req.strategy_name,
+#             interval=req.interval,
+#             investment=req.investment
+#         )
+#         return {
+#             "status": "completed",
+#             "strategy": req.strategy_name,
+#             "results": results
+#         }
 #     except Exception as e:
 #         raise HTTPException(status_code=400, detail=str(e))
-
-# for direct parameters
-@router.post("/manual")
-def manual_order(
-        symbol : str ,
-        action : str ,
-        investment : float ,
-):
-    return  place_manual_order(symbol , action ,investment)

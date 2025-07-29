@@ -126,6 +126,7 @@ def get_user_by_identifier(db, identifier):
 # ===========================================use when sms provider available ^^^^^   ================================
 
 # ============================================remove it wehn sms provider===========================================================
+
 def send_password_change_otp(db, identifier):
     user = get_user_by_identifier(db, identifier)
     if not user:

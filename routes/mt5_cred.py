@@ -1,10 +1,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from MetaTrader5 import initialize, shutdown, last_error
-
 from App.api_config import set_user_credentials
 
-router = APIRouter(prefix="/mt5creds", tags=["mt5creds"])
+router = APIRouter(prefix="/mt5creds", tags=["MT5creds"])
 
 class MT5LoginRequest(BaseModel):
     login: int
@@ -30,3 +29,4 @@ def login_mt5(request: MT5LoginRequest):
 
     shutdown()
     return {"status": "success", "message": "MT5 login verified and credentials stored."}
+

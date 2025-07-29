@@ -56,13 +56,6 @@ class ManualOrderRequest(BaseModel):
 
 CUSTOM_STRATEGIES = []
 
-class BacktestRequest(BaseModel):
-    symbol: str
-    market: str = "forex"
-    investment: float
-    strategy_name: Optional[str] = None
-    strategy_names: Optional[List[str]] = None
-    strategy: Optional[Strategy] = None
-    interval : str = "1d"
-    days : int = 365
+
+
 
