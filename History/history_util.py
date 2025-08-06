@@ -1,14 +1,66 @@
-# utils/trading_utils.py
-
 import MetaTrader5 as mt5
-from datetime import datetime, timedelta
+from datetime import datetime
+from database.db_connection import get_connection
+from Security.encryption_mt5 import decrypt_password , get_mt5_credentials
 
-def get_open_positions(symbol=None):
-    if not mt5.initialize():
+
+
+
+
+def init_mt5(user_id: int):
+    creds = get_mt5_credentials(user_id)
+    if not creds:
+        return {"status": "error", "message": "MT5 credentials not found"}
+
+    if not mt5.initialize(
+        login=creds["login"],
+        password=creds["password"],
+        server=creds["server"]
+    ):
         return {"status": "error", "message": "MT5 initialization failed"}
 
-    positions = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
+    return {"status": "success"}
 
+
+
+def get_open_positions_by_user(user_id: int):
+    creds = get_mt5_credentials(user_id)
+
+    initialized = mt5.initialize(
+        login=creds["login"],
+        password=creds["password"],  # already stored
+        server=creds["server"]
+    )
+    if not initialized:
+        return {"status": "error", "message": "MT5 initialization failed"}
+
+    positions = mt5.positions_get()
+
+    if positions is None:
+        mt5.shutdown()
+        return {"status": "error", "message": "Failed to get positions"}
+
+    result = []
+    for pos in positions:
+        result.append({
+            "symbol": pos.symbol,
+            "ticket": pos.ticket,
+            "type": "buy" if pos.type == 0 else "sell",
+            "volume": pos.volume,
+            "price_open": pos.price_open,
+            "profit": pos.profit,
+            "time": pos.time
+        })
+
+    mt5.shutdown()
+    return {"status": "success", "positions": result}
+
+def get_open_positions(user_id: int, symbol=None):
+    init_result = init_mt5(user_id)
+    if init_result["status"] != "success":
+        return init_result
+
+    positions = mt5.positions_get(symbol=symbol) if symbol else mt5.positions_get()
     if positions is None:
         return {"status": "error", "message": "Failed to get positions"}
 
@@ -24,25 +76,29 @@ def get_open_positions(symbol=None):
             "time": pos.time
         })
 
+    mt5.shutdown()
     return {"status": "success", "positions": result}
 
 
-
-def close_position_by_ticket(ticket: int):
-    if not mt5.initialize():
-        return {"status": "error", "message": "MT5 initialization failed"}
+def close_position_by_ticket(user_id: int, ticket: int):
+    init_result = init_mt5(user_id)
+    if init_result["status"] != "success":
+        return init_result
 
     position = mt5.positions_get(ticket=ticket)
     if position is None or len(position) == 0:
         return {"status": "error", "message": "No open position with given ticket"}
 
     pos = position[0]
-
     symbol = pos.symbol
     volume = pos.volume
-    position_type = pos.type  # 0 = buy, 1 = sell
+    position_type = pos.type
 
-    price = mt5.symbol_info_tick(symbol).bid if position_type == 0 else mt5.symbol_info_tick(symbol).ask
+    tick = mt5.symbol_info_tick(symbol)
+    if tick is None:
+        return {"status": "error", "message": "Symbol tick info not found"}
+
+    price = tick.bid if position_type == 0 else tick.ask
     order_type = mt5.ORDER_TYPE_SELL if position_type == 0 else mt5.ORDER_TYPE_BUY
 
     request = {
@@ -60,6 +116,7 @@ def close_position_by_ticket(ticket: int):
     }
 
     result = mt5.order_send(request)
+    mt5.shutdown()
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         return {
@@ -71,10 +128,10 @@ def close_position_by_ticket(ticket: int):
     return {"status": "success", "message": "Position closed", "retcode": result.retcode}
 
 
-
-def get_trade_history():
-    if not mt5.initialize():
-        return {"status": "error", "message": "MT5 initialization failed"}
+def get_trade_history(user_id: int):
+    init_result = init_mt5(user_id)
+    if init_result["status"] != "success":
+        return init_result
 
     from_date = datetime(2024, 1, 1)
     to_date = datetime.now()
@@ -83,6 +140,7 @@ def get_trade_history():
     last_error = mt5.last_error()
 
     if deals is None:
+        mt5.shutdown()
         return {
             "status": "error",
             "message": "Failed to get trade history",
@@ -102,17 +160,21 @@ def get_trade_history():
             "time": datetime.fromtimestamp(deal.time).strftime("%Y-%m-%d %H:%M:%S")
         })
 
+    mt5.shutdown()
     return {"status": "success", "count": len(result), "history": result}
 
 
-def get_account_info():
-    if not mt5.initialize():
-        return {"status": "error", "message": "MT5 initialization failed"}
+def get_account_info(user_id: int):
+    init_result = init_mt5(user_id)
+    if init_result["status"] != "success":
+        return init_result
 
     account_info = mt5.account_info()
     if account_info is None:
+        mt5.shutdown()
         return {"status": "error", "message": "Failed to retrieve account info"}
 
+    mt5.shutdown()
     return {
         "status": "success",
         "account": {
@@ -126,6 +188,6 @@ def get_account_info():
             "margin": account_info.margin,
             "margin_free": account_info.margin_free,
             "margin_level": account_info.margin_level,
-            "trade_mode": account_info.trade_mode  # 0=Demo, 1=Real
+            "trade_mode": account_info.trade_mode
         }
     }

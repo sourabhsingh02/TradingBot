@@ -1,30 +1,6 @@
 from data.completeData import get_price_change_today_vs_yesterday , fetch_mt5_tick_data
 from SymbolsPairs.forexSymbols import fetch_all_forex_symbols, get_logo_url
-from datetime import datetime , timedelta
-import pandas as pd
-import MetaTrader5 as mt5
-from App.api_config import MT5_LOGIN, MT5_PASSWORD, MT5_SERVER
 
-
-# def get_all_metrics():
-#     symbols = fetch_all_forex_symbols()
-#     results = []
-#     for symbol in symbols:
-#         try:
-#             data = get_price_change_today_vs_yesterday(symbol)
-#             if data and data.get("status") == "success":
-#                 percent_change = data["percent_change"]
-#                 results.append({
-#                     "symbol": symbol,
-#                     "price": data["current_price"],
-#                     "change": data["change_str"],  # with + or -
-#                     "percent": data["percent_change_str"],  # with % and sign
-#                     "status": "up" if percent_change > 0 else "down",
-#                     "logo": get_logo_url(symbol)
-#                 })
-#         except Exception as e:
-#             print(f"Error in {symbol}: {e}")
-#     return results
 
 def paginate_data(data, page: int = 1, limit: int = 10):
     start = (page - 1) * limit

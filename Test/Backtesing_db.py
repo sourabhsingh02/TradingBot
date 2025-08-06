@@ -6,9 +6,11 @@ from pydantic import BaseModel
 import operator
 import pandas_ta as ta
 from data.completeData import fetch_mt5_historical_data
-from Strategies.predefined_strategies import PREDEFINED_STRATEGIES
+from database.db_connection import get_connection
+import json
 
-router = APIRouter(prefix="/backtesting", tags=["backtesting"])
+router = APIRouter(prefix="/backtestingdb", tags=["backtesting || DB"])
+
 
 OP_MAP = {
     ">": operator.gt,
@@ -26,7 +28,7 @@ def add_indicator(df: pd.DataFrame, indicator: str) -> pd.Series:
         return ta.rsi(df["close"])
     elif indicator.startswith("sma"):
         window = int(indicator.replace("sma", ""))
-        return ta.ema(df["close"], length=window)
+        return ta.sma(df["close"], length=window)
     elif indicator.startswith("ema"):
         window = int(indicator.replace("ema", ""))
         return ta.ema(df["close"], length=window)
@@ -83,7 +85,7 @@ def run_backtest(symbol: str, interval: str, days: int, investment: float, condi
 
             if buy_price is None:
                 buy_price = price
-                continue  # only consider signal after a buy is placed
+                continue
             else:
                 sell_price = price
                 pl = (sell_price - buy_price) * (investment / buy_price)
@@ -97,7 +99,7 @@ def run_backtest(symbol: str, interval: str, days: int, investment: float, condi
                     "gain_loss_percent": round(percent, 2)
                 })
 
-                buy_price = None  # reset for next buy signal
+                buy_price = None
 
     if not triggers:
         return {
@@ -130,21 +132,6 @@ def run_backtest(symbol: str, interval: str, days: int, investment: float, condi
         "results": triggers
     }
 
-# @router.get("/backtest")
-# def backtest(
-#     symbol: str = Query(...),
-#     investment: float = Query(...),
-#     strategy: str = Query(...),
-#     interval: str = Query("1d"),
-#     days: int = Query(365)
-# ):
-#     strategy_def = next((s for s in PREDEFINED_STRATEGIES if s["name"].lower() == strategy.lower()), None)
-#     if not strategy_def:
-#         return {"error": f"Strategy '{strategy}' not found"}
-#     return run_backtest(symbol, interval, days, investment, strategy_def["conditions"])
-
-# ... [rest of your imports remain same] ...
-
 @router.get("/backtest")
 def backtest(
     symbol: str = Query(...),
@@ -153,18 +140,28 @@ def backtest(
     interval: str = Query("1d"),
     days: int = Query(365)
 ):
-    strategy_def = next((s for s in PREDEFINED_STRATEGIES if s["name"].lower() == strategy.lower()), None)
-    if not strategy_def:
-        return {"error": f"Strategy '{strategy}' not found"}
-    result = run_backtest(symbol, interval, days, investment, strategy_def["conditions"])
-    if (
-        isinstance(result, dict)
-        and isinstance(result.get("results", []), list)
-        and len(result["results"]) == 0
-    ):
-        return {
-            "message": f"No signals found — strategy does not match for {symbol},"
-                       f" interval: {interval}, days: {days}. Try different parameters."
-        }
-    return result
+    conn = get_connection()
+    if conn is None:
+        return {"error": "DB connection failed"}
 
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT conditions FROM predefined_strategies WHERE LOWER(name) = %s", (strategy.lower(),))
+    row = cursor.fetchone()
+
+    if not row:
+        return {"error": f"Strategy '{strategy}' not found"}
+
+    try:
+        conditions = json.loads(row["conditions"])
+    except Exception:
+        return {"error": "Invalid strategy conditions format"}
+    finally:
+        cursor.close()
+        conn.close()
+
+    result = run_backtest(symbol, interval, days, investment, conditions)
+
+    if isinstance(result, dict) and isinstance(result.get("results", []), list) and len(result["results"]) == 0:
+        return {"message": "No signals found"}
+
+    return result

@@ -3,21 +3,21 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# ❗ Secret key - no spaces
+
 SECRET_KEY = "bfyhdindxbdygogbf"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 security = HTTPBearer()
 
-# 🔐 Generate Token
+
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# 🔍 Verify Token
+
 def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -25,7 +25,7 @@ def verify_token(token: str):
     except JWTError:
         return None
 
-# 🔐 Secure Endpoint Dependency
+
 # def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 #     token = credentials.credentials
 #     payload = verify_token(token)

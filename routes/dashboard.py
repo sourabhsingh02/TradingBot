@@ -25,19 +25,3 @@ def top_moviers(page : int = Query(1,gt = 0),limit :int = Query(10,gt=0)):
 
 
 
-# @router.get("/most-bought-pairs")
-# def most_bought_pairs(page: int = Query(1, ge=1), per_page: int = Query(10, le=50)):
-#     try:
-#         data = get_most_bought_pairs(page, per_page)
-#         return {"status": "success", "results": data}
-#     except Exception as e:
-#         return {"status": "error", "message": str(e)}
-#
-#
-# @router.get("/most-sold-pairs")
-# def most_sold_pairs(page: int = Query(1, ge=1), per_page: int = Query(10, le=50)):
-#     try:
-#         data = get_most_sold_pairs(page, per_page)
-#         return {"status": "success", "results": data}
-#     except Exception as e:
-#         return {"status": "error", "message": str(e)

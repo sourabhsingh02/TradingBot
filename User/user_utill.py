@@ -231,5 +231,3 @@ def delete_user_by_identifier(db, identifier, password):
         cursor.execute("DELETE FROM users WHERE id = %s", (user["id"],))
     db.commit()
     return True, "User deleted successfully"
-
-

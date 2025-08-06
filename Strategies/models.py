@@ -54,7 +54,7 @@ class ManualOrderRequest(BaseModel):
     investment : float
 
 
-CUSTOM_STRATEGIES = []
+
 
 
 
