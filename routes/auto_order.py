@@ -44,7 +44,7 @@ def apply_predefined_strategy(
             continue
 
         cursor.execute("""
-            INSERT INTO applied_strategy (user_id, strategy_id, symbol, investment, interval, strategy_type)
+            INSERT INTO applied_strategy (user_id, strategy_id, symbol, investment, time_interval, strategy_type)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (current_user["id"], strategy["id"], symbol, request.investment, request.interval, "predefined"))
         conn.commit()
@@ -90,7 +90,7 @@ def apply_custom_strategy(
             continue
 
         cursor.execute("""
-            INSERT INTO applied_strategy (user_id, strategy_id, symbol, investment, interval, strategy_type)
+            INSERT INTO applied_strategy (user_id, strategy_id, symbol, investment, time_interval, strategy_type)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (current_user["id"], strategy["id"], symbol, request.investment, request.interval, "custom"))
         conn.commit()
@@ -114,14 +114,14 @@ def get_active_strategies(current_user: dict = Depends(get_current_user)):
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT a.symbol, a.investment, a.interval, a.strategy_type,
+        SELECT a.symbol, a.investment, a.time_interval, a.strategy_type,
                CASE 
                    WHEN a.strategy_type = 'predefined' THEN p.name 
                    ELSE c.name 
                END AS strategy_name
         FROM applied_strategy a
         LEFT JOIN predefined_strategies p ON a.strategy_type = 'predefined' AND a.strategy_id = p.id
-        LEFT JOIN custom_strategies c ON a.strategy_type = 'custom' AND a.strategy_id = c.id
+        LEFT JOIN custom_strategy c ON a.strategy_type = 'custom' AND a.strategy_id = c.id
         WHERE a.user_id = %s AND a.is_active = TRUE
     """, (current_user["id"],))
 
@@ -152,7 +152,7 @@ def unapply_strategy(
     if request.strategy_type == "predefined":
         cursor.execute("SELECT id FROM predefined_strategies WHERE name = %s", (request.strategy_name,))
     elif request.strategy_type == "custom":
-        cursor.execute("SELECT id FROM custom_strategies WHERE name = %s AND user_id = %s", (request.strategy_name, current_user["id"]))
+        cursor.execute("SELECT id FROM custom_strategy WHERE name = %s AND user_id = %s", (request.strategy_name, current_user["id"]))
     else:
         raise HTTPException(status_code=400, detail="Invalid strategy_type")
 
@@ -170,6 +170,7 @@ def unapply_strategy(
     """, (current_user["id"], strategy_id, request.symbol, request.strategy_type))
 
     if cursor.rowcount == 0:
+
         raise HTTPException(status_code=404, detail="No active strategy found to unapply")
 
     conn.commit()

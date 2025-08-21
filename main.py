@@ -19,7 +19,19 @@ from Admin.admin_routes.predefined_strategy import router as admin_predefined_st
 from Test.Backtesing_db import router as backTesting_db_router
 
 
+from fastapi.middleware.cors import CORSMiddleware
+# Middleware
+
+
 app = FastAPI(title="TradingBot API")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 @app.get("/")
 def root():
@@ -50,5 +62,3 @@ app.include_router(admin_router)
 #     import uvicorn
 #
 #     uvicorn.run(app, host="127.0.0.1", port=8080)
-#
-#

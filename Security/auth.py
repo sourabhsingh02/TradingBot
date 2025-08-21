@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
+from database.db_connection import get_connection
 
 SECRET_KEY = "bfyhdindxbdygogbf"
 ALGORITHM = "HS256"
@@ -26,22 +26,39 @@ def verify_token(token: str):
         return None
 
 
-# def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-#     token = credentials.credentials
-#     payload = verify_token(token)
-#     if not payload:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Invalid token or expired session",
-#         )
-#     return payload
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db=Depends(get_connection)
+):
     token = credentials.credentials
+
+    # Check if token is blacklisted
+    with db.cursor(dictionary=True) as cursor:
+        cursor.execute("SELECT id FROM blacklisted_tokens WHERE token = %s", (token,))
+        blacklisted = cursor.fetchone()
+
+    if blacklisted:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been logged out. Please login again."
+        )
+
     payload = verify_token(token)
     if not payload or "id" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token or expired session",
         )
+
     return {"id": payload["id"]}
+
+
+# def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+#     token = credentials.credentials
+#     payload = verify_token(token)
+#     if not payload or "id" not in payload:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Invalid token or expired session",
+#         )
+#     return {"id": payload["id"]}

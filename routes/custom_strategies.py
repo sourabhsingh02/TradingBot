@@ -86,16 +86,27 @@ def get_full_strategy(name: str , current_user: dict = Depends(get_current_user)
 
 
 @router.put("/update/{strategy_id}")
-def update_custom_strategy(strategy_id: int, data: UpdateStrategyRequest):
+def update_custom_strategy(
+    strategy_id: int,
+    data: UpdateStrategyRequest,
+    current_user: dict = Depends(get_current_user)
+):
     conn = get_connection()
     if conn is None:
-        return {"error": "DB connection failed"}
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
     try:
         cursor = conn.cursor()
-        # Convert conditions to JSON string
-        serialized_conditions = json.dumps([condition.dict() for condition in data.conditions])
 
+
+        cursor.execute("SELECT id FROM custom_strategy WHERE id = %s AND user_id = %s", (strategy_id, current_user["id"]))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Strategy not found or not owned by user")
+
+
+        serialized_conditions = json.dumps([condition.model_dump() for condition in data.conditions])
+
+        # Perform update
         cursor.execute("""
             UPDATE custom_strategy
             SET name = %s, conditions = %s
@@ -103,12 +114,11 @@ def update_custom_strategy(strategy_id: int, data: UpdateStrategyRequest):
         """, (data.name, serialized_conditions, strategy_id))
 
         conn.commit()
-
-        if cursor.rowcount == 0:
-            return {"message": "Strategy not found"}
         return {"message": "Strategy updated successfully"}
+
     finally:
         cursor.close()
+        conn.close()
         conn.close()
 
 

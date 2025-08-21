@@ -3,9 +3,11 @@ from database.db_connection import get_connection
 from User.user_utill import *
 from database.schemas.users_schema import *
 from Security.auth import get_current_user, create_access_token
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi import APIRouter, HTTPException , Query
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from typing import Dict
 
+security = HTTPBearer()
 
 router = APIRouter(prefix="/user" , tags=["User"])
 
@@ -37,6 +39,25 @@ def login(payload: LoginRequest, db=Depends(get_connection)):
         "token_type": "bearer",
         "user": user
     }
+
+
+
+@router.post("/logout", summary="Logout current user (JWT required)")
+def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db=Depends(get_connection)
+):
+    token = credentials.credentials
+
+    # Save token in blacklist table
+    with db.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO blacklisted_tokens (token, created_at) VALUES (%s, %s)",
+            (token, datetime.now())
+        )
+        db.commit()
+
+    return {"success": True, "message": "Logged out successfully"}
 
 
 @router.get("/protected")
@@ -112,6 +133,8 @@ def change_by_otp(payload: ChangePasswordByOTPRequest, db=Depends(get_connection
     if success:
         return {"success": True, "message": msg}
     return {"success": False, "error": msg}
+
+
 
 
 @router.delete("/delete", summary="Delete current logged-in user")

@@ -1,6 +1,7 @@
 from typing import List
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query , HTTPException , Depends
 import pandas as pd
+from Security.auth import get_current_user
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import operator
@@ -132,7 +133,7 @@ def run_backtest(symbol: str, interval: str, days: int, investment: float, condi
         "results": triggers
     }
 
-@router.get("/backtest")
+@router.get("/backtest-builtIn")
 def backtest(
     symbol: str = Query(...),
     investment: float = Query(...),
@@ -155,6 +156,46 @@ def backtest(
         conditions = json.loads(row["conditions"])
     except Exception:
         return {"error": "Invalid strategy conditions format"}
+    finally:
+        cursor.close()
+        conn.close()
+
+    result = run_backtest(symbol, interval, days, investment, conditions)
+
+    if isinstance(result, dict) and isinstance(result.get("results", []), list) and len(result["results"]) == 0:
+        return {"message": "No signals found"}
+
+    return result
+
+from fastapi import Query
+
+@router.get("/backtest-custom")
+def backtest_custom_strategy(
+    symbol: str = Query(...),
+    investment: float = Query(...),
+    strategy: str = Query(...),
+    interval: str = Query("1d"),
+    days: int = Query(365),
+    current_user: dict = Depends(get_current_user)
+):
+    conn = get_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="DB connection failed")
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT conditions FROM custom_strategy WHERE user_id = %s AND LOWER(name) = %s",
+        (current_user["id"], strategy.lower())
+    )
+    row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy}' not found")
+
+    try:
+        conditions = json.loads(row["conditions"])
+    except Exception:
+        raise HTTPException(status_code=500, detail="Invalid strategy conditions format")
     finally:
         cursor.close()
         conn.close()

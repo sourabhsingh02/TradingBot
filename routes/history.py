@@ -32,12 +32,11 @@ def trade_history(current_user: dict = Depends(get_current_user)):
     return get_trade_history(user_id=current_user["id"])
 
 
-@router.get("/close-position")
-def close_by_ticket(
-    ticket: int = Query(...),
-    current_user: dict = Depends(get_current_user)
-):
-    return close_position_by_ticket(user_id=current_user["id"], ticket=ticket)
+# def close_by_ticket(
+#     ticket: int = Query(...),
+#     current_user: dict = Depends(get_current_user)
+# ):
+#     return close_position_by_ticket(user_id=current_user["id"], ticket=ticket)
 
 
 @router.get("/account-info")
@@ -51,14 +50,14 @@ def get_active_strategies(current_user: dict = Depends(get_current_user)):
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT a.symbol, a.investment, a.interval, a.strategy_type,
+        SELECT a.symbol, a.investment, a.time_interval, a.strategy_type,
                CASE 
                    WHEN a.strategy_type = 'predefined' THEN p.name 
                    ELSE c.name 
                END AS strategy_name
         FROM applied_strategy a
         LEFT JOIN predefined_strategies p ON a.strategy_type = 'predefined' AND a.strategy_id = p.id
-        LEFT JOIN custom_strategies c ON a.strategy_type = 'custom' AND a.strategy_id = c.id
+        LEFT JOIN custom_strategy c ON a.strategy_type = 'custom' AND a.strategy_id = c.id
         WHERE a.user_id = %s AND a.is_active = TRUE
     """, (current_user["id"],))
 

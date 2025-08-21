@@ -65,7 +65,6 @@
 # sniffio==1.3.1
 # soupsieve==2.7
 # starlette==0.36.3
-
 # ta==0.11.0
 # tenacity==9.1.2
 # toml==0.10.2
