@@ -17,7 +17,7 @@ from Admin.admin_routes.user import router as admin_user_router
 from Admin.admin_routes.custom_strategy import router as admin_custom_strategy_router
 from Admin.admin_routes.predefined_strategy import router as admin_predefined_strategy_router
 from Test.Backtesing_db import router as backTesting_db_router
-
+from routes.advance_atuo_trade import router as advance_router
 
 from fastapi.middleware.cors import CORSMiddleware
 # Middleware
@@ -38,6 +38,8 @@ def root():
     return {"msg": "hello"}
 
 # attach all /api routes
+app.include_router(auto_order_router)
+app.include_router(advance_router)
 app.include_router(user_router)
 app.include_router(mt5_router)
 app.include_router(built_in_strategy_router)
@@ -45,7 +47,7 @@ app.include_router(custom_strategy_router)
 app.include_router(backTesting_db_router)
 app.include_router(symbols_router)
 app.include_router(order_router)
-app.include_router(auto_order_router)
+
 app.include_router(history_router)
 app.include_router(data_router)
 app.include_router(backTesting_router)

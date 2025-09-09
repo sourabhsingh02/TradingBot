@@ -1,27 +1,9 @@
-# USE_MT5 = True
-# MT5_LOGIN = 480920
-# MT5_PASSWORD = "V*TbWo8i"
-# MT5_SERVER = "ICMCapitalLtd-Demo"
-
-# ------------------------------------------------For Testing
-DEFAULT_MT5_LOGIN = 480920
-DEFAULT_MT5_PASSWORD = "V*TbWo8i"
-DEFAULT_MT5_SERVER = "ICMCapitalLtd-Demo"
-
 
 dynamic_mt5_credentials = {
-    "login": DEFAULT_MT5_LOGIN,
-    "password": DEFAULT_MT5_PASSWORD,
-    "server": DEFAULT_MT5_SERVER,
+    "login": None,
+    "password": None,
+    "server": None,
 }
-# -----------------------------------------------------For Testing
-
-# -----------------------------------------------------for production
-# dynamic_mt5_credentials = {
-#     "login": None,
-#     "password": None,
-#     "server": None,
-# }
 
 # These are the variables used in other files
 MT5_LOGIN = lambda: dynamic_mt5_credentials["login"]

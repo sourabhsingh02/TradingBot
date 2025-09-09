@@ -4,9 +4,6 @@ from database.db_connection import get_connection
 from Security.encryption_mt5 import decrypt_password , get_mt5_credentials
 
 
-
-
-
 def init_mt5(user_id: int):
     creds = get_mt5_credentials(user_id)
     if not creds:
@@ -128,6 +125,8 @@ def close_position_by_ticket(user_id: int, ticket: int):
     return {"status": "success", "message": "Position closed", "retcode": result.retcode}
 
 
+
+
 def get_trade_history(user_id: int):
     init_result = init_mt5(user_id)
     if init_result["status"] != "success":
@@ -150,6 +149,16 @@ def get_trade_history(user_id: int):
 
     result = []
     for deal in deals:
+        symbol_info = mt5.symbol_info(deal.symbol)
+        if symbol_info is None:
+            continue
+
+        contract_size = symbol_info.trade_contract_size
+
+
+        notional = deal.price * deal.volume * contract_size
+        profit_percent = (deal.profit / notional * 100) if notional > 0 else 0
+
         result.append({
             "symbol": deal.symbol,
             "ticket": deal.ticket,
@@ -157,6 +166,7 @@ def get_trade_history(user_id: int):
             "volume": deal.volume,
             "price": deal.price,
             "profit": deal.profit,
+            "profit_percent": round(profit_percent, 2),
             "time": datetime.fromtimestamp(deal.time).strftime("%Y-%m-%d %H:%M:%S")
         })
 

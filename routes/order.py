@@ -85,10 +85,48 @@ def close_position_by_symbol(symbol: str, current_user: dict = Depends(get_curre
 
     positions = mt5.positions_get(symbol=symbol)
     if not positions:
+        mt5.shutdown()
         raise HTTPException(status_code=404, detail="No open positions for this symbol")
 
+    failed_positions = []
     for pos in positions:
-        close_position_by_ticket(pos.ticket)
+        result = close_position_by_ticket(pos.ticket)  # <-- This returns dict now
+        if result.get("status") == "error":
+            failed_positions.append({
+                "ticket": pos.ticket,
+                "retcode": result.get("retcode"),
+                "message": result.get("message")
+            })
 
     mt5.shutdown()
-    return {"message": "Position(s) closed successfully"}
+
+    if failed_positions:
+        raise HTTPException(
+            status_code=500,
+            detail={"message": "Some positions failed to close", "errors": failed_positions}
+        )
+
+    return {"message": "All positions closed successfully"}
+
+
+# @router.post("/close-by-symbol")
+# def close_position_by_symbol(symbol: str, current_user: dict = Depends(get_current_user)):
+#     creds = get_mt5_credentials(current_user["id"])
+#
+#     initialized = mt5.initialize(
+#         login=creds["login"],
+#         password=creds["password"],
+#         server=creds["server"]
+#     )
+#     if not initialized:
+#         raise HTTPException(status_code=500, detail="MT5 initialization failed")
+#
+#     positions = mt5.positions_get(symbol=symbol)
+#     if not positions:
+#         raise HTTPException(status_code=404, detail="No open positions for this symbol")
+#
+#     for pos in positions:
+#         close_position_by_ticket(pos.ticket)
+#
+#     mt5.shutdown()
+#     return {"message": "Position(s) closed successfully"}
